@@ -845,7 +845,17 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
      * @return true or false indicate antenna available or not
      */
     private boolean isAntennaAvailable() {
-        return true; // force wireless
+
+        if (SystemProperties.get("ro.vendor.mtk_fm_short_antenna_support").equals("1")) {
+            return true; // Support wireless FM Radio on MTK chips
+        }
+
+        if (mContext.getResources().getBoolean(R.bool.config_enableWirelessFM)) {
+           return true;
+        } else {
+           return mAudioManager.isWiredHeadsetOn();
+        }
+
     }
 
     /**
