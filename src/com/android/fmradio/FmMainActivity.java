@@ -1140,8 +1140,10 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         mButtonPrevStation = (ImageButton) findViewById(R.id.button_prevstation);
         mButtonNextStation = (ImageButton) findViewById(R.id.button_nextstation);
 
-        mTextRds.setTextIsSelectable(true);
-        mTextRds.setSelected(true);
+
+        mTextStationValue.setTextIsSelectable(true);
+        mTextStationName.setTextIsSelectable(true);
+
 
         // put favorite button here since it might be used very early in
         // changing recording mode

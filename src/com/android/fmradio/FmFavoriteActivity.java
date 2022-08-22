@@ -24,6 +24,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.database.Cursor;
 import android.graphics.Color;
+
 import android.graphics.Typeface;
 import android.location.Location;
 import android.location.LocationManager;
@@ -104,10 +105,6 @@ public class FmFavoriteActivity extends Activity {
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         getWindow().requestFeature(Window.FEATURE_ACTION_BAR);
         setContentView(R.layout.station_list);
-        mContext = getApplicationContext();
-
-        final Cursor stationList = getData();
-
         // display action bar and navigation button
         ActionBar actionBar = getActionBar();
         actionBar.setTitle(getString(R.string.station_title) +
@@ -121,8 +118,9 @@ public class FmFavoriteActivity extends Activity {
         mSearchTips = (LinearLayout) findViewById(R.id.search_tips);
         mSearchProgress = (ProgressBar) findViewById(R.id.search_progress);
 
+
         mGridView.setAdapter(mMyAdapter); // set adapter
-        mMyAdapter.swipResult(stationList);
+        mMyAdapter.swipResult(getData());
         mGridView.setFocusable(false);
         mGridView.setFocusableInTouchMode(false);
 
@@ -249,7 +247,6 @@ public class FmFavoriteActivity extends Activity {
         ImageView mStationTypeView;
         TextView mStationFreqView;
         TextView mStationNameView;
-        TextView mStationRtView;
     }
 
     private Cursor getData() {
@@ -375,8 +372,6 @@ public class FmFavoriteActivity extends Activity {
                         .findViewById(R.id.lv_station_freq);
                 viewHolder.mStationNameView = (TextView) convertView
                         .findViewById(R.id.lv_station_name);
-                viewHolder.mStationRtView = (TextView) convertView
-                        .findViewById(R.id.lv_station_rt);
                 convertView.setTag(viewHolder);
             } else {
                 viewHolder = (ViewHolder) convertView.getTag();
@@ -397,17 +392,29 @@ public class FmFavoriteActivity extends Activity {
                     name = mCursor.getString(mCursor
                             .getColumnIndex(FmStation.Station.PROGRAM_SERVICE));
                 }
+
                 if (null == name) {
                     name = "";
                 }
-                if (null == rt) {
-                    rt = "";
+
+                if (rds == null) {
+                    rds = "";
+                }
+
+                if (!name.equals("") && !rds.equals("")) {
+                    name += " | ";
+                }
+
+                if ("".equals(name) && rds.equals("")) {
+                    viewHolder.mStationNameView.setVisibility(View.GONE);
+                } else {
+                    viewHolder.mStationNameView.setSelected(true);
+                    viewHolder.mStationNameView.setVisibility(View.VISIBLE);
                 }
 
                 viewHolder.mStationFreqView.setText(FmUtils.formatStation(stationFreq));
-                updateRDSViews(viewHolder.mStationFreqView,
-                        viewHolder.mStationNameView, viewHolder.mStationRtView,
-                        name, rt);
+                viewHolder.mStationNameView.setText(name + rds);
+
                 viewHolder.mStationTypeView.setImageResource(0 == isFavorite ?
                         R.drawable.btn_fm_favorite_off_selector :
                         R.drawable.btn_fm_favorite_on_selector);
