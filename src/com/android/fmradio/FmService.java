@@ -177,8 +177,6 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
     private NotificationManager mNotificationManager = null;
     private NotificationChannel mNotificationChannel = null;
     private MediaSession mSession;
-    private String mCachedArtworkKey = null;
-    private Bitmap mCachedArtwork = null;
 
     public static int POWER_UP = 0;
     public static int DURING_POWER_UP = 1;
@@ -1873,20 +1871,32 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
                             NotificationManager.IMPORTANCE_LOW);
 
 
-        NotificationManager notificationManager = getSystemService(NotificationManager.class);
-        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
-                    getString(R.string.channel_playback_name), NotificationManager.IMPORTANCE_LOW);
-            channel.setDescription(getString(R.string.channel_playback_description));
-            channel.setBlockable(true);
-            notificationManager.createNotificationChannel(channel);
-        }
+            boolean isPlaying = isPlaying();
+            int playButtonResId = isPlaying
+                    ? R.drawable.btn_fm_rec_stop_enabled :
+                    R.drawable.btn_fm_rec_playback_enabled;
+            int playButtonTitleResId = isPlaying
+                    ? R.string.accessibility_pause :
+                    R.string.accessibility_play;
 
-        if (null == mNotificationBuilder) {
-            mNotificationBuilder = new Notification.Builder(mContext, CHANNEL_ID);
-            mNotificationBuilder.setSmallIcon(R.mipmap.ic_launcher);
-            mNotificationBuilder.setShowWhen(false);
-            mNotificationBuilder.setAutoCancel(true);
+            long playBackStateActions = PlaybackState.ACTION_PLAY |
+                    PlaybackState.ACTION_PLAY_PAUSE |
+                    PlaybackState.ACTION_PAUSE |
+                    PlaybackState.ACTION_SKIP_TO_NEXT |
+                    PlaybackState.ACTION_SKIP_TO_PREVIOUS |
+                    PlaybackState.ACTION_STOP;
+
+            mSession.setPlaybackState(new PlaybackState.Builder()
+                    .setActions(playBackStateActions)
+                    .setState((isPlaying ?
+                            PlaybackState.STATE_PLAYING :
+                            PlaybackState.STATE_PAUSED), 0, 1.0f).build());
+
+            Notification.Builder notificationBuilder;
+            notificationBuilder = new Notification.Builder(mContext, NOTIFICATION_CHANNEL);
+            notificationBuilder.setSmallIcon(R.drawable.ic_notification);
+            notificationBuilder.setShowWhen(false);
+            notificationBuilder.setAutoCancel(true);
 
 
             Intent intent = new Intent(FM_SEEK_PREVIOUS);
@@ -1906,14 +1916,15 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
                     getString(R.string.accessibility_next) , pIntent);
             notificationBuilder.setContentIntent(pAIntent);
 
-            final String freq = FmUtils.formatStation(mCurrentStation);
-            if (!freq.equals(mCachedArtworkKey)) {
-                mCachedArtwork = FmUtils.createNotificationArtwork(mContext, freq);
-                mCachedArtworkKey = freq;
-            }
-            notificationBuilder.setColor(mContext.getResources()
-                    .getColor(R.color.notification_icon_bg_color));
-            notificationBuilder.setLargeIcon(mCachedArtwork);
+            Bitmap largeIcon = FmUtils.createNotificationLargeIcon(mContext,
+                    FmUtils.formatStation(mCurrentStation));
+            notificationBuilder.setLargeIcon(largeIcon);
+            // Apply the media style template
+            notificationBuilder.setStyle(
+                    new Notification.MediaStyle()
+                    .setShowActionsInCompactView(0, 1, 2)
+                    .setMediaSession(mSession.getSessionToken()));
+
 
             // Show FM Radio if empty
             if (TextUtils.isEmpty(stationName)) {
@@ -1944,10 +1955,6 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
     private void setUpMediaSession() {
         mSession = new MediaSession(this, TAG);
         mSession.setActive(true);
-        AudioAttributes attrs = new AudioAttributes.Builder()
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build();
-        mSession.setPlaybackToLocal(attrs);
         mSession.setCallback(new MediaSession.Callback() {
             @Override
             public void onPause() {
