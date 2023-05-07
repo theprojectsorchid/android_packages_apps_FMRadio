@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Android Open Source Project
+ * Copyright (C) 2014,2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.res.Resources;
 import android.database.Cursor;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -105,8 +104,6 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
 
     private View mNoHeadsetImgViewWrap = null;
 
-    private float mMiddleShadowSize;
-
     private LinearLayout mMainLayout = null;
 
     private RelativeLayout mNoHeadsetLayout = null;
@@ -138,6 +135,8 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
     private boolean mIsActivityForeground = true;
 
     private int mCurrentStation = FmUtils.DEFAULT_STATION;
+
+    private boolean mPoweredUpAtLeastOnce = false;
 
     // Instance variables
     private FmService mService = null;
@@ -225,6 +224,16 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
 
                 case FmListener.MSGID_POWERUP_FINISHED:
                     bundle = msg.getData();
+
+                    // In wireless mode on first power up we have to set proper
+                    // icon as it expects headphones by default
+                    if (!mPoweredUpAtLeastOnce) {
+                        boolean isHeadSetIn = mService.isHeadSetIn();
+                        setMenuItemAudioIcon(!isHeadSetIn);
+                        refreshMenuItemAudio(isHeadSetIn);
+                        mPoweredUpAtLeastOnce = true;
+                    }
+
                     boolean isPowerup = (mService.getPowerStatus() == FmService.POWER_UP);
                     int station = bundle.getInt(FmListener.KEY_TUNE_TO_STATION);
                     mCurrentStation = station;
@@ -243,23 +252,8 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
                 case FmListener.MSGID_SWITCH_ANTENNA:
                     bundle = msg.getData();
                     boolean hasAntenna = bundle.getBoolean(FmListener.KEY_IS_SWITCH_ANTENNA);
-                    // if receive headset plug out, need set headset mode on ui
-                    if (hasAntenna) {
-                        if (mIsActivityForeground) {
-                            cancelNoHeadsetAnimation();
-                            playMainAnimation();
-                        } else {
-                            changeToMainLayout();
-                        }
-                    } else {
-                        mMenuItemHeadset.setIcon(R.drawable.btn_fm_headset_selector);
-                        if (mIsActivityForeground) {
-                            cancelMainAnimation();
-                            playNoHeadsetAnimation();
-                        } else {
-                            changeToNoHeadsetLayout();
-                        }
-                    }
+                    setMenuItemAudioIcon(!hasAntenna);
+                    refreshMenuItemAudio(hasAntenna);
                     break;
 
                 case FmListener.MSGID_POWERDOWN_FINISHED:
@@ -310,13 +304,14 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
                 case FmListener.LISTEN_PS_CHANGED:
                     String stationName = FmStation.getStationName(mContext, mCurrentStation);
                     mTextStationName.setText(stationName);
-                    mScroller.notifyAdatperChange();
+                    mScroller.notifyAdatperCurrentItemRDSChanged();
                     break;
 
                 case FmListener.LISTEN_RT_CHANGED:
                     bundle = msg.getData();
                     String rtString = bundle.getString(FmListener.KEY_RT_INFO);
                     mTextRds.setText(rtString);
+                    mScroller.notifyAdatperCurrentItemRDSChanged();
                     break;
 
                 case FmListener.LISTEN_SPEAKER_MODE_CHANGED:
@@ -439,7 +434,6 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
 
         @Override
         public void onAnimationStart(Animation animation) {
-            mNoHeadsetImgViewWrap.setElevation(mMiddleShadowSize);
         }
 
     }
@@ -543,7 +537,7 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
             String stationName = FmStation.getStationName(mContext, mCurrentStation);
             mTextStationName.setText(stationName);
         }
-        mScroller.notifyAdatperChange();
+        mScroller.notifyAdapterChange();
         String title = getString(R.string.toast_station_renamed);
         FmSnackBar.make(FmMainActivity.this, title, null, null,
                 FmSnackBar.DEFAULT_DURATION).show();
@@ -644,13 +638,13 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         }
 
         // Should start FM service first.
-        if (null == startService(new Intent(FmMainActivity.this, FmService.class))) {
+        if (null == startService((new Intent()).setClass(this, FmService.class))) {
             Log.e(TAG, "onStart, cannot start FM service");
             return;
         }
 
         mIsServiceStarted = true;
-        mIsServiceBinded = bindService(new Intent(FmMainActivity.this, FmService.class),
+        mIsServiceBinded = bindService((new Intent()).setClass(this, FmService.class),
                 mServiceConnection, Context.BIND_AUTO_CREATE);
 
         if (!mIsServiceBinded) {
@@ -770,8 +764,7 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         refreshActionMenuItem(isSeeking ? false : isPowerUp);
         refreshPlayButton(isSeeking ? false
                 : (isPowerUp || (isPowerdown && !mIsDisablePowerMenu)));
-        mMenuItemHeadset.setIcon(isSpeakerUsed ? R.drawable.btn_fm_speaker_selector
-                : R.drawable.btn_fm_headset_selector);
+        setMenuItemAudioIcon(isSpeakerUsed);
         return true;
     }
 
@@ -852,7 +845,7 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
      * @return true or false indicate antenna available or not
      */
     private boolean isAntennaAvailable() {
-        return mAudioManager.isWiredHeadsetOn();
+        return true; // force wireless
     }
 
     /**
@@ -881,12 +874,12 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
                             try {
                                 playMusicIntent.setClassName("com.google.android.music",
                                         "com.google.android.music.AudioPreview");
-                                playMusicIntent.setDataAndType(playUri, "audio/3gpp");
+                                playMusicIntent.setDataAndType(playUri, "audio/mpeg");
                                 startActivity(playMusicIntent);
                             } catch (IllegalArgumentException | ActivityNotFoundException e1) {
                                 try {
                                     playMusicIntent = new Intent(Intent.ACTION_VIEW);
-                                    playMusicIntent.setDataAndType(playUri, "audio/3gpp");
+                                    playMusicIntent.setDataAndType(playUri, "audio/mpeg");
                                     startActivity(playMusicIntent);
                                 } catch (ActivityNotFoundException e2) {
                                     // No activity respond
@@ -1004,7 +997,9 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
             // menu
             mMenuItemStationlList.setEnabled(enabled);
             // If BT headset is in use, need to disable speaker/earphone switching menu.
-            mMenuItemHeadset.setEnabled(enabled && !mService.isBluetoothHeadsetInUse());
+            mMenuItemHeadset.setEnabled(enabled &&
+                    mService.isHeadSetIn() &&
+                    !mService.isBluetoothHeadsetInUse());
         }
     }
 
@@ -1016,8 +1011,6 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         mButtonPlay.setImageResource((isPowerUp
                 ? R.drawable.btn_fm_stop_selector
                 : R.drawable.btn_fm_start_selector));
-        Resources r = getResources();
-        mBtnPlayInnerContainer.setBackground(r.getDrawable(R.drawable.fb_red));
         mScroller.refreshPlayIndicator(mCurrentStation, isPowerUp);
     }
 
@@ -1110,11 +1103,21 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         Log.d(TAG, "updateMenuStatus.mIsDisablePowerMenu: " + mIsDisablePowerMenu);
         refreshPlayButton(fmStatus ? false
                 : (isPowerUp || (isPowerdown && !mIsDisablePowerMenu)));
-        if (null != mMenuItemHeadset) {
-            mMenuItemHeadset.setIcon(isSpeakerUsed ? R.drawable.btn_fm_speaker_selector
-                    : R.drawable.btn_fm_headset_selector);
-        }
+        setMenuItemAudioIcon(isSpeakerUsed);
+    }
 
+    private void setMenuItemAudioIcon(final boolean isSpeakerUsed) {
+        if (null != mMenuItemHeadset) {
+            mMenuItemHeadset.setIcon(isSpeakerUsed ?
+                    R.drawable.btn_fm_speaker_selector :
+                    R.drawable.btn_fm_headset_selector);
+        }
+    }
+
+    private void refreshMenuItemAudio(final boolean enabled) {
+        if (null != mMenuItemHeadset) {
+            mMenuItemHeadset.setEnabled(enabled);
+        }
     }
 
     private void initUiComponent() {
@@ -1126,6 +1129,9 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         mButtonIncrease = (ImageButton) findViewById(R.id.button_increase);
         mButtonPrevStation = (ImageButton) findViewById(R.id.button_prevstation);
         mButtonNextStation = (ImageButton) findViewById(R.id.button_nextstation);
+
+        mTextRds.setTextIsSelectable(true);
+        mTextRds.setSelected(true);
 
         // put favorite button here since it might be used very early in
         // changing recording mode
@@ -1142,7 +1148,6 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         mNoEarPhoneTxt = (TextView) findViewById(R.id.no_eaphone_text);
         mNoHeadsetImgView = (ImageView) findViewById(R.id.no_headset_img);
         mNoHeadsetImgViewWrap = findViewById(R.id.no_middle);
-        mMiddleShadowSize = getResources().getDimension(R.dimen.fm_middle_shadow);
         // main ui layout params
         final Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setActionBar(toolbar);
@@ -1239,6 +1244,5 @@ public class FmMainActivity extends Activity implements FmFavoriteEditDialog.Edi
         mNoHeadsetImgView.setVisibility(View.VISIBLE);
         mNoHeadsetImgViewWrap.setVisibility(View.VISIBLE);
         mNoHeadsetLayout.setVisibility(View.VISIBLE);
-        mNoHeadsetImgViewWrap.setElevation(mMiddleShadowSize);
     }
 }
