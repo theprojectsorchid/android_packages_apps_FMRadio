@@ -18,6 +18,9 @@ package com.android.fmradio;
 
 import android.app.ActivityManager;
 import android.app.Notification;
+
+import android.app.Notification.BigTextStyle;
+
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -106,6 +109,7 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
 
     // Notification id
     private static final int NOTIFICATION_ID = 1;
+    private static final String CHANNEL_ID = "playback";
 
     // Notification channel
     public static final String NOTIFICATION_CHANNEL = "fmradio_notification_channel";
@@ -1868,35 +1872,22 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
                             mContext.getString(R.string.app_name),
                             NotificationManager.IMPORTANCE_LOW);
 
-                mNotificationManager.createNotificationChannel(mNotificationChannel);
-            }
 
-            boolean isPlaying = isPlaying();
-            int playButtonResId = isPlaying
-                    ? R.drawable.btn_fm_rec_stop_enabled :
-                    R.drawable.btn_fm_rec_playback_enabled;
-            int playButtonTitleResId = isPlaying
-                    ? R.string.accessibility_pause :
-                    R.string.accessibility_play;
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
+            NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
+                    getString(R.string.channel_playback_name), NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription(getString(R.string.channel_playback_description));
+            channel.setBlockable(true);
+            notificationManager.createNotificationChannel(channel);
+        }
 
-            long playBackStateActions = PlaybackState.ACTION_PLAY |
-                    PlaybackState.ACTION_PLAY_PAUSE |
-                    PlaybackState.ACTION_PAUSE |
-                    PlaybackState.ACTION_SKIP_TO_NEXT |
-                    PlaybackState.ACTION_SKIP_TO_PREVIOUS |
-                    PlaybackState.ACTION_STOP;
+        if (null == mNotificationBuilder) {
+            mNotificationBuilder = new Notification.Builder(mContext, CHANNEL_ID);
+            mNotificationBuilder.setSmallIcon(R.mipmap.ic_launcher);
+            mNotificationBuilder.setShowWhen(false);
+            mNotificationBuilder.setAutoCancel(true);
 
-            mSession.setPlaybackState(new PlaybackState.Builder()
-                    .setActions(playBackStateActions)
-                    .setState((isPlaying ?
-                            PlaybackState.STATE_PLAYING :
-                            PlaybackState.STATE_PAUSED), 0, 1.0f).build());
-
-            Notification.Builder notificationBuilder;
-            notificationBuilder = new Notification.Builder(mContext, NOTIFICATION_CHANNEL);
-            notificationBuilder.setSmallIcon(R.drawable.ic_notification);
-            notificationBuilder.setShowWhen(false);
-            notificationBuilder.setAutoCancel(true);
 
             Intent intent = new Intent(FM_SEEK_PREVIOUS);
             intent.setClass(mContext, FmService.class);
