@@ -17,7 +17,7 @@
 
 <resources>
     <!-- Application name shown in Launcher [CHAR LIMIT=20] -->
-    <string name="app_name">FM Radio</string>
+    <string name="app_name">Pepsi Radio</string>
     <!-- Toast message shown after we refresh radio stations successfully [CHAR LIMIT=50] -->
     <string name="toast_station_searched">Searched out available stations:</string>
     <!-- Toast message shown after we refresh radio stations failed [CHAR LIMIT=50] -->
